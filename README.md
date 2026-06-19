@@ -67,6 +67,7 @@ Network access control should be fully managed and isolated by the user's infras
 | `/` | GET | Web UI dashboard |
 | `/api/health` | GET | Health check |
 | `/api/vpn/status` | GET | VPN connection status |
+| `/api/vpn/log` | GET | VPN client logs |
 | `/api/vpn/on` | POST | Connect VPN |
 | `/api/vpn/off` | POST | Disconnect VPN |
 | `/api/config` | GET | Read config (passwords masked) |
@@ -185,6 +186,7 @@ environment:
 | `/` | GET | Web UI 控制面板 |
 | `/api/health` | GET | 健康检查 |
 | `/api/vpn/status` | GET | VPN 连接状态 |
+| `/api/vpn/log` | GET | VPN 客户端日志 |
 | `/api/vpn/on` | POST | 连接 VPN |
 | `/api/vpn/off` | POST | 断开 VPN |
 | `/api/config` | GET | 读取配置（密码脱敏） |
