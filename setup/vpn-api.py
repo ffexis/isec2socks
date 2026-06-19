@@ -29,8 +29,7 @@ def parse_vpn_status(output):
     status = {
         'connected': 'connected' in output.lower(),
         'vpn': 'DOWN',
-        'gost': 'DOWN',
-        'guardian': 'DOWN'
+        'gost': 'DOWN'
     }
     for line in output.split('\n'):
         line = line.strip()
@@ -38,8 +37,6 @@ def parse_vpn_status(output):
             status['vpn'] = line.split(':', 1)[1].strip()
         elif 'GOST Proxy' in line:
             status['gost'] = 'RUNNING' if 'RUNNING' in line else 'DOWN'
-        elif 'Route Guardian' in line:
-            status['guardian'] = 'RUNNING' if 'RUNNING' in line else 'DOWN'
     return status
 
 def read_json_config():
