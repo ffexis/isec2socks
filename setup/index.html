@@ -122,10 +122,9 @@ function setStatus(id, text) {
   el.className = 'status-value ' + (text === 'RUNNING' || text === 'connected' ? 'status-on' : 'status-off');
 }
 
-function updateButtons(vpnState) {
-  const connected = vpnState === 'connected';
-  document.getElementById('btn-on').disabled = connected;
-  document.getElementById('btn-off').disabled = !connected;
+function updateButtons(isConnected) {
+  document.getElementById('btn-on').disabled = isConnected;
+  document.getElementById('btn-off').disabled = !isConnected;
 }
 
 function validatePort(p) {
