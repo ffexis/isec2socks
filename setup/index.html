@@ -165,12 +165,21 @@ async function refreshStatus() {
     const r = await fetch(API + '/api/vpn/status');
     const d = await r.json();
     const vpn = d.vpn || 'DOWN';
-    setStatus('s-vpn', vpn);
+    const currentVpn = document.getElementById('s-vpn').textContent;
+    if (vpn.toLowerCase() === 'connected') {
+      setStatus('s-vpn', 'Connected');
+      updateButtons(true);
+    } else if (currentVpn !== 'Connecting' && currentVpn !== 'Failed') {
+      setStatus('s-vpn', 'Disconnected');
+      updateButtons(false);
+    }
     setStatus('s-gost', d.gost || 'DOWN');
     setStatus('s-guardian', d.guardian || 'DOWN');
-    updateButtons(vpn === 'Connected');
   } catch(e) {
-    setStatus('s-vpn', 'ERROR');
+    const currentVpn = document.getElementById('s-vpn').textContent;
+    if (currentVpn !== 'Connecting' && currentVpn !== 'Failed') {
+      setStatus('s-vpn', 'ERROR');
+    }
     setStatus('s-gost', 'ERROR');
     setStatus('s-guardian', 'ERROR');
     updateButtons(false);
@@ -185,7 +194,7 @@ async function vpnOn() {
     const r = await fetch(API + '/api/vpn/on', { method: 'POST' });
     const d = await r.json();
     if (d.success) {
-      refreshStatus();
+      await refreshStatus();
     } else {
       setStatus('s-vpn', 'Failed');
       openLogModal();

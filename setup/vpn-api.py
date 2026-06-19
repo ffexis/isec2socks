@@ -25,18 +25,16 @@ def run_vpn_cmd(action, timeout=30):
         return {'success': False, 'output': str(e)}
 
 def parse_vpn_status(output):
+    is_connected = 'connected' in output.lower()
     status = {
-        'connected': 'connected' in output.lower(),
-        'vpn': 'DOWN',
+        'connected': is_connected,
+        'vpn': 'Connected' if is_connected else 'DOWN',
         'gost': 'DOWN',
         'guardian': 'DOWN'
     }
     for line in output.split('\n'):
         line = line.strip()
-        if 'VPN Status:' in line:
-            raw = line.split(':', 1)[1].strip()
-            status['vpn'] = raw.capitalize() if raw else 'DOWN'
-        elif 'GOST Proxy' in line:
+        if 'GOST Proxy' in line:
             status['gost'] = 'RUNNING' if 'RUNNING' in line else 'DOWN'
         elif 'Route Guardian' in line:
             status['guardian'] = 'RUNNING' if 'RUNNING' in line else 'DOWN'
