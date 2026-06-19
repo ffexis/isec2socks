@@ -157,13 +157,14 @@ async function refreshStatus() {
     const r = await fetch(API + '/api/vpn/status');
     const d = await r.json();
     const vpn = d.vpn || 'DOWN';
+    const gost = d.gost || 'DOWN';
     setStatus('s-vpn', vpn);
-    setStatus('s-gost', d.gost || 'DOWN');
-    updateButtons(vpn);
+    setStatus('s-gost', gost);
+    updateButtons(vpn === 'connected');
   } catch(e) {
     setStatus('s-vpn', 'ERROR');
     setStatus('s-gost', 'ERROR');
-    updateButtons('idle');
+    updateButtons(false);
   }
 }
 

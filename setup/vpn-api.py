@@ -51,11 +51,11 @@ def write_json_config(data):
 @app.route('/api/vpn/status')
 def vpn_status():
     result = run_vpn_cmd('status')
-    if result['success']:
+    if result['output']:
         status = parse_vpn_status(result['output'])
         status['raw'] = result['output']
         return status
-    return {'error': result['output']}, 500
+    return {'connected': False, 'vpn': 'DOWN', 'gost': 'DOWN', 'raw': 'No output'}
 
 @app.route('/api/vpn/on', method='POST')
 def vpn_on():
