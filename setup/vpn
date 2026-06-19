@@ -56,7 +56,22 @@ case "$1" in
             nohup gost -L :31080 > /var/log/gost.log 2>&1 &
         fi
         
-        # 3. Stream and Decode Logs (Fixing the \xxxx Unicode/Octal escape issue)
+        # 3. Launch route guardian
+        if ! pgrep -f "vpn-route-guardian" > /dev/null; then
+            echo "[COMPONENT] Launching local route guardian..."
+            nohup bash -c '
+                exec -a vpn-route-guardian bash -c "
+                while true; do
+                    if ! ip route | grep -q \"192.168.31.0/24\"; then
+                        ip route add 192.168.31.0/24 via 172.19.0.1 dev eth0 2>/dev/null
+                    fi
+                    sleep 3
+                done
+                "
+            ' > /dev/null 2>&1 &
+        fi
+        
+        # 4. Stream and Decode Logs (Fixing the \xxxx Unicode/Octal escape issue)
         echo "=== [LOGS] Streaming active login logs (Auto-detach in 10s) ==="
         timeout 10 tail -f /var/log/vpn_cli.log | while read -r line; do
             # If the line contains escapes, force echo to parse it or fallback to raw
@@ -69,6 +84,7 @@ case "$1" in
         echo "[STOP] Tearing down network stack..."
         $VPN_CMD -s
         pkill -f "gost -L"
+        pkill -f "vpn-route-guardian"
         echo "[SUCCESS] All associated processes cleared."
         ;;
         
@@ -79,9 +95,10 @@ case "$1" in
         echo ""
         echo "=== [STATUS] Auxiliary Services ==="
         pgrep -f "gost -L" > /dev/null && echo "  GOST Proxy     : RUNNING (Port 31080)" || echo "  GOST Proxy     : DOWN"
+        pgrep -f "vpn-route-guardian" > /dev/null && echo "  Route Guardian : RUNNING" || echo "  Route Guardian : DOWN"
         echo ""
         echo "=== [STATUS] Kernel Routing Table ==="
-        ip route | grep -E "tun0" --color=always
+        ip route | grep -E "tun0|192.168.31" --color=always
         ;;
         
     api)
@@ -107,7 +124,7 @@ case "$1" in
         
     *)
         echo "Invalid usage!"
-        echo "  vpn on       - Connect VPN + proxy"
+        echo "  vpn on       - Connect VPN + proxy + route guardian"
         echo "  vpn off      - Disconnect and clean up"
         echo "  vpn status   - View connection and routing status"
         echo "  vpn api start|stop - Manage API server"
