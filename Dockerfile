@@ -27,6 +27,6 @@ COPY setup/vpn /usr/local/bin/vpn
 COPY setup/vpn-api.py /usr/local/bin/vpn-api.py
 COPY setup/start-api.sh /usr/local/bin/start-api.sh
 COPY setup/vpn-conf.json /etc/vpn-conf.json
-COPY setup/index.html /etc/pkutun/index.html
+COPY setup/index.html /etc/isec2socks/index.html
 
 RUN chmod +x /usr/local/bin/vpn /usr/local/bin/start-api.sh /usr/local/bin/vpn-api.py

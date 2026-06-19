@@ -1,7 +1,7 @@
 services:
-  pkutun-cli:
+  isec2socks:
     build: .
-    container_name: pkutun-cli
+    container_name: isec2socks
     restart: unless-stopped
     cap_add:
       - NET_ADMIN

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "========================================="
-echo "  pkutun-cli container starting..."
+echo "  isec2socks container starting..."
 echo "========================================="
 
 # ==================== VPN Client ====================

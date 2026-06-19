@@ -1,4 +1,4 @@
-# pkutun
+# isec2socks
 
 [English](#english) | [中文](#中文)
 
@@ -6,7 +6,7 @@
 
 ## English
 
-### What is pkutun?
+### What is isec2socks?
 
 A network utility that packages the iSecSP command-line client into a Docker container. It establishes standard Array Networks VPN connections inside the container and exposes standard SOCKS5/HTTP proxy ports to the outside (e.g., your local LAN).
 
@@ -25,8 +25,8 @@ A network utility that packages the iSecSP command-line client into a Docker con
 ### Quick Start
 
 ```bash
-git clone https://github.com/your-username/pkutun.git
-cd pkutun
+git clone https://github.com/your-username/isec2socks.git
+cd isec2socks
 docker compose up -d
 ```
 
@@ -98,7 +98,7 @@ curl -X PUT -H "Content-Type: application/json" \
 
 ```
 ┌─────────────────────────────────────────────┐
-│  Container: pkutun-cli                      │
+│  Container: isec2socks-cli                      │
 │                                             │
 │  ┌─────────┐  ┌──────┐  ┌───────────────┐  │
 │  │ iSecSP  │  │ GOST │  │ Route         │  │
@@ -124,7 +124,7 @@ MIT
 
 ## 中文
 
-### 什么是 pkutun？
+### 什么是 isec2socks？
 
 一个将 iSecSP 命令行客户端封装进 Docker 容器的网络工具。它可以在容器内建立标准的 Array Networks VPN 连接，并对外（如本地局域网）暴露标准的 SOCKS5/HTTP 代理端口。
 
@@ -143,8 +143,8 @@ MIT
 ### 快速开始
 
 ```bash
-git clone https://github.com/your-username/pkutun.git
-cd pkutun
+git clone https://github.com/your-username/isec2socks.git
+cd isec2socks
 docker compose up -d
 ```
 
@@ -216,7 +216,7 @@ curl -X PUT -H "Content-Type: application/json" \
 
 ```
 ┌─────────────────────────────────────────────┐
-│  容器: pkutun-cli                           │
+│  容器: isec2socks-cli                           │
 │                                             │
 │  ┌─────────┐  ┌──────┐  ┌───────────────┐  │
 │  │ iSecSP  │  │ GOST │  │ 路由          │  │

@@ -112,7 +112,7 @@ def health():
 
 @app.route('/')
 def index():
-    return bottle.static_file('index.html', root='/etc/pkutun')
+    return bottle.static_file('index.html', root='/etc/isec2socks')
 
 if __name__ == '__main__':
     with open(PID_FILE, 'w') as f:
