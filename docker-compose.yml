@@ -1,0 +1,25 @@
+services:
+  pkutun-cli:
+    build: .
+    container_name: pkutun-cli
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    tty: true
+    stdin_open: true
+    entrypoint: ["/entrypoint.sh"]
+    command: []
+    ports:
+      - "31080:31080"
+      - "31081:31081"
+    # environment:
+    #   - VPN_HOST=your-server:443
+    #   - VPN_USER=your-user
+    #   - VPN_PASS=your-pass
+    #   - VPN_SECOND_AUTH=0000
+    #   - VPN_DEB_URL=https://example.com/iSecSP.deb
+    volumes:
+      - ./entrypoint.sh:/entrypoint.sh:ro
+      - ./setup/vpn-conf.json:/etc/vpn-conf.json

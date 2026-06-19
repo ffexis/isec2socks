@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pkutun - VPN Manager</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+  .container { max-width: 600px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #f8fafc; }
+  h1 span { color: #38bdf8; }
+  .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #334155; }
+  .card-title { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; margin-bottom: 16px; }
+  .status-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .status-item { text-align: center; }
+  .status-label { font-size: 12px; color: #64748b; margin-bottom: 4px; }
+  .status-value { font-size: 14px; font-weight: 600; }
+  .status-on { color: #4ade80; }
+  .status-off { color: #f87171; }
+  .btn-group { display: flex; gap: 12px; margin-top: 16px; }
+  .btn { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-on { background: #16a34a; color: white; }
+  .btn-on:hover:not(:disabled) { background: #15803d; }
+  .btn-off { background: #dc2626; color: white; }
+  .btn-off:hover:not(:disabled) { background: #b91c1c; }
+  .btn-refresh { background: #334155; color: #e2e8f0; }
+  .btn-refresh:hover:not(:disabled) { background: #475569; }
+  .form-group { margin-bottom: 14px; }
+  .form-group:last-child { margin-bottom: 0; }
+  .form-label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; }
+  .form-row { display: flex; gap: 8px; }
+  .form-input { width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 14px; outline: none; transition: border-color 0.2s; }
+  .form-input:focus { border-color: #38bdf8; }
+  .form-input::placeholder { color: #475569; }
+  .form-input.host { flex: 1; }
+  .form-input.port { width: 80px; flex: none; text-align: center; }
+  .form-hint { font-size: 11px; color: #64748b; margin-top: 4px; }
+  .form-hint.err { color: #f87171; }
+  .btn-save { width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 16px; transition: background 0.2s; }
+  .btn-save:hover:not(:disabled) { background: #1d4ed8; }
+  .btn-save:disabled { opacity: 0.4; cursor: not-allowed; }
+  .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 500; z-index: 100; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .toast-ok { background: #16a34a; color: white; }
+  .toast-err { background: #dc2626; color: white; }
+  .footer { text-align: center; font-size: 12px; color: #475569; margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1><span>pkutun</span> VPN Manager</h1>
+
+  <div class="card">
+    <div class="card-title">Connection Status</div>
+    <div class="status-grid">
+      <div class="status-item">
+        <div class="status-label">VPN</div>
+        <div class="status-value" id="s-vpn">--</div>
+      </div>
+      <div class="status-item">
+        <div class="status-label">GOST Proxy</div>
+        <div class="status-value" id="s-gost">--</div>
+      </div>
+      <div class="status-item">
+        <div class="status-label">Route Guardian</div>
+        <div class="status-value" id="s-guardian">--</div>
+      </div>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-on" id="btn-on" onclick="vpnOn()">Connect</button>
+      <button class="btn btn-off" id="btn-off" onclick="vpnOff()">Disconnect</button>
+      <button class="btn btn-refresh" onclick="refreshStatus()">Refresh</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">VPN Configuration</div>
+    <div class="form-group">
+      <label class="form-label">VPN Server</label>
+      <div class="form-row">
+        <input class="form-input host" id="cfg-host" placeholder="arrayvpn.pku.edu.cn">
+        <input class="form-input port" id="cfg-port" placeholder="443" maxlength="5">
+      </div>
+      <div class="form-hint" id="hint-host"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Username</label>
+      <input class="form-input" id="cfg-user" placeholder="Student ID">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input class="form-input" id="cfg-pass" type="password" placeholder="Password">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Second Factor</label>
+      <input class="form-input" id="cfg-auth" placeholder="As prompted by official client login">
+    </div>
+    <div class="form-hint" style="margin-top: -8px; margin-bottom: 8px;">Provide the value as required when logging in with the official client.</div>
+    <button class="btn-save" id="btn-save" onclick="saveConfig()">Save Configuration</button>
+  </div>
+
+  <div class="footer">pkutun v0.1.0</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';
+
+function toast(msg, ok) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (ok ? 'toast-ok' : 'toast-err');
+  setTimeout(() => t.className = 'toast', 2500);
+}
+
+function setStatus(id, text) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = 'status-value ' + (text === 'RUNNING' || text === 'connected' ? 'status-on' : 'status-off');
+}
+
+function updateButtons(vpnState) {
+  const connected = vpnState === 'connected';
+  document.getElementById('btn-on').disabled = connected;
+  document.getElementById('btn-off').disabled = !connected;
+}
+
+function validatePort(p) {
+  if (p === '') return true;
+  const n = parseInt(p, 10);
+  return !isNaN(n) && n >= 1 && n <= 65535 && String(n) === p;
+}
+
+function validateForm() {
+  const host = document.getElementById('cfg-host').value.trim();
+  const port = document.getElementById('cfg-port').value.trim();
+  const user = document.getElementById('cfg-user').value.trim();
+  const hint = document.getElementById('hint-host');
+  const saveBtn = document.getElementById('btn-save');
+
+  let valid = true;
+
+  if (port && !validatePort(port)) {
+    hint.textContent = 'Port must be 1-65535';
+    hint.className = 'form-hint err';
+    valid = false;
+  } else {
+    hint.textContent = '';
+    hint.className = 'form-hint';
+  }
+
+  if (!host || !user) valid = false;
+  saveBtn.disabled = !valid;
+}
+
+async function refreshStatus() {
+  try {
+    const r = await fetch(API + '/api/vpn/status');
+    const d = await r.json();
+    const vpn = d.vpn || 'DOWN';
+    setStatus('s-vpn', vpn);
+    setStatus('s-gost', d.gost || 'DOWN');
+    setStatus('s-guardian', d.guardian || 'DOWN');
+    updateButtons(vpn);
+  } catch(e) {
+    setStatus('s-vpn', 'ERROR');
+    setStatus('s-gost', 'ERROR');
+    setStatus('s-guardian', 'ERROR');
+    updateButtons('idle');
+  }
+}
+
+async function vpnOn() {
+  document.getElementById('btn-on').disabled = true;
+  try {
+    await fetch(API + '/api/vpn/on', { method: 'POST' });
+    toast('VPN connecting...', true);
+    setTimeout(refreshStatus, 3000);
+  } catch(e) { toast('Failed: ' + e.message, false); }
+}
+
+async function vpnOff() {
+  document.getElementById('btn-off').disabled = true;
+  try {
+    await fetch(API + '/api/vpn/off', { method: 'POST' });
+    toast('VPN disconnected', true);
+    setTimeout(refreshStatus, 1000);
+  } catch(e) { toast('Failed: ' + e.message, false); }
+}
+
+async function loadConfig() {
+  try {
+    const r = await fetch(API + '/api/config');
+    const d = await r.json();
+    const hostRaw = d.VPN_HOST || '';
+    const parts = hostRaw.split(':');
+    document.getElementById('cfg-host').value = parts[0] || '';
+    document.getElementById('cfg-port').value = parts[1] || '443';
+    document.getElementById('cfg-user').value = d.VPN_USER || '';
+    document.getElementById('cfg-pass').value = '';
+    document.getElementById('cfg-auth').value = '';
+    document.getElementById('cfg-pass').placeholder = d.VPN_PASS === '****' ? '••••••••' : 'Password';
+    document.getElementById('cfg-auth').placeholder = d.VPN_SECOND_AUTH === '****' ? '••••' : 'As prompted by official client login';
+    validateForm();
+  } catch(e) {}
+}
+
+async function saveConfig() {
+  const btn = document.getElementById('btn-save');
+  btn.disabled = true;
+  const host = document.getElementById('cfg-host').value.trim();
+  const port = document.getElementById('cfg-port').value.trim() || '443';
+  const user = document.getElementById('cfg-user').value.trim();
+  const pass = document.getElementById('cfg-pass').value;
+  const auth = document.getElementById('cfg-auth').value.trim();
+  if (!host || !user) { toast('Please fill in host and username', false); btn.disabled = false; return; }
+  const body = {};
+  if (host) body.VPN_HOST = host + ':' + port;
+  if (user) body.VPN_USER = user;
+  if (pass) body.VPN_PASS = pass;
+  if (auth) body.VPN_SECOND_AUTH = auth;
+  if (Object.keys(body).length === 0) { toast('Nothing to save', false); btn.disabled = false; return; }
+  try {
+    const r = await fetch(API + '/api/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (d.success) { toast('Configuration saved', true); loadConfig(); }
+    else toast('Save failed: ' + (d.error || ''), false);
+  } catch(e) { toast('Failed: ' + e.message, false); }
+  btn.disabled = false;
+}
+
+document.getElementById('cfg-host').addEventListener('input', validateForm);
+document.getElementById('cfg-port').addEventListener('input', validateForm);
+document.getElementById('cfg-user').addEventListener('input', validateForm);
+document.getElementById('cfg-pass').addEventListener('input', validateForm);
+
+refreshStatus();
+loadConfig();
+setInterval(refreshStatus, 10000);
+</script>
+</body>
+</html>
