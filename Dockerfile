@@ -30,3 +30,6 @@ COPY setup/vpn-conf.json /etc/vpn-conf.json
 COPY setup/index.html /etc/isec2socks/index.html
 
 RUN chmod +x /usr/local/bin/vpn /usr/local/bin/start-api.sh /usr/local/bin/vpn-api.py
+
+# Fix CRLF line endings (from Windows checkout)
+RUN sed -i 's/\r$//' /usr/local/bin/vpn /usr/local/bin/start-api.sh /usr/local/bin/vpn-api.py
