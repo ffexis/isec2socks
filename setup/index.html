@@ -41,11 +41,14 @@
   .btn-save { width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 16px; transition: background 0.2s; }
   .btn-save:hover:not(:disabled) { background: #1d4ed8; }
   .btn-save:disabled { opacity: 0.4; cursor: not-allowed; }
-  .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 500; z-index: 100; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
-  .toast.show { opacity: 1; }
-  .toast-ok { background: #16a34a; color: white; }
-  .toast-err { background: #dc2626; color: white; }
   .footer { text-align: center; font-size: 12px; color: #475569; margin-top: 24px; }
+  .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 200; justify-content: center; align-items: center; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: #1e293b; border-radius: 12px; width: 90%; max-width: 700px; max-height: 80vh; display: flex; flex-direction: column; border: 1px solid #334155; }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #334155; font-weight: 600; }
+  .modal-close { background: none; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; }
+  .modal-close:hover { color: #e2e8f0; }
+  .modal-body { padding: 16px 20px; overflow-y: auto; margin: 0; font-size: 13px; color: #94a3b8; white-space: pre-wrap; word-break: break-all; }
 </style>
 </head>
 <body>
@@ -72,6 +75,7 @@
       <button class="btn btn-on" id="btn-on" onclick="vpnOn()">Connect</button>
       <button class="btn btn-off" id="btn-off" onclick="vpnOff()">Disconnect</button>
       <button class="btn btn-refresh" onclick="refreshStatus()">Refresh</button>
+      <button class="btn btn-refresh" id="btn-logs" onclick="openLogModal()">Logs</button>
     </div>
   </div>
 
@@ -104,22 +108,23 @@
   <div class="footer">isec2socks v0.1.0</div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="modal-overlay" id="log-modal" onclick="closeLogModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span>VPN Logs</span>
+      <button class="modal-close" onclick="closeLogModal()">&times;</button>
+    </div>
+    <pre class="modal-body" id="log-content"></pre>
+  </div>
+</div>
 
 <script>
 const API = '';
 
-function toast(msg, ok) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast show ' + (ok ? 'toast-ok' : 'toast-err');
-  setTimeout(() => t.className = 'toast', 2500);
-}
-
 function setStatus(id, text) {
   const el = document.getElementById(id);
   el.textContent = text;
-  el.className = 'status-value ' + (text === 'RUNNING' || text === 'connected' ? 'status-on' : 'status-off');
+  el.className = 'status-value ' + (text === 'RUNNING' || text === 'Connected' ? 'status-on' : 'status-off');
 }
 
 function updateButtons(isConnected) {
@@ -160,11 +165,10 @@ async function refreshStatus() {
     const r = await fetch(API + '/api/vpn/status');
     const d = await r.json();
     const vpn = d.vpn || 'DOWN';
-    const gost = d.gost || 'DOWN';
     setStatus('s-vpn', vpn);
     setStatus('s-gost', d.gost || 'DOWN');
     setStatus('s-guardian', d.guardian || 'DOWN');
-    updateButtons(vpn === 'connected');
+    updateButtons(vpn === 'Connected');
   } catch(e) {
     setStatus('s-vpn', 'ERROR');
     setStatus('s-gost', 'ERROR');
@@ -174,21 +178,33 @@ async function refreshStatus() {
 }
 
 async function vpnOn() {
-  document.getElementById('btn-on').disabled = true;
+  const btnOn = document.getElementById('btn-on');
+  btnOn.disabled = true;
+  setStatus('s-vpn', 'Connecting');
   try {
-    await fetch(API + '/api/vpn/on', { method: 'POST' });
-    toast('VPN connecting...', true);
-    setTimeout(refreshStatus, 3000);
-  } catch(e) { toast('Failed: ' + e.message, false); }
+    const r = await fetch(API + '/api/vpn/on', { method: 'POST' });
+    const d = await r.json();
+    if (d.success) {
+      refreshStatus();
+    } else {
+      setStatus('s-vpn', 'Failed');
+      openLogModal();
+    }
+  } catch(e) {
+    setStatus('s-vpn', 'ERROR');
+  } finally {
+    btnOn.disabled = false;
+  }
 }
 
 async function vpnOff() {
-  document.getElementById('btn-off').disabled = true;
+  const btnOff = document.getElementById('btn-off');
+  btnOff.disabled = true;
   try {
     await fetch(API + '/api/vpn/off', { method: 'POST' });
-    toast('VPN disconnected', true);
-    setTimeout(refreshStatus, 1000);
-  } catch(e) { toast('Failed: ' + e.message, false); }
+  } catch(e) {}
+  refreshStatus();
+  btnOff.disabled = false;
 }
 
 async function loadConfig() {
@@ -202,8 +218,8 @@ async function loadConfig() {
     document.getElementById('cfg-user').value = d.VPN_USER || '';
     document.getElementById('cfg-pass').value = '';
     document.getElementById('cfg-auth').value = '';
-    document.getElementById('cfg-pass').placeholder = d.VPN_PASS === '****' ? '••••••••' : 'Password';
-    document.getElementById('cfg-auth').placeholder = d.VPN_SECOND_AUTH === '****' ? '••••' : 'As prompted by official client login';
+    document.getElementById('cfg-pass').placeholder = d.VPN_PASS === '****' ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' : 'Password';
+    document.getElementById('cfg-auth').placeholder = d.VPN_SECOND_AUTH === '****' ? '\u2022\u2022\u2022\u2022' : 'As prompted by official client login';
     validateForm();
   } catch(e) {}
 }
@@ -216,13 +232,13 @@ async function saveConfig() {
   const user = document.getElementById('cfg-user').value.trim();
   const pass = document.getElementById('cfg-pass').value;
   const auth = document.getElementById('cfg-auth').value.trim();
-  if (!host || !user) { toast('Please fill in host and username', false); btn.disabled = false; return; }
+  if (!host || !user) { btn.disabled = false; return; }
   const body = {};
   if (host) body.VPN_HOST = host + ':' + port;
   if (user) body.VPN_USER = user;
   if (pass) body.VPN_PASS = pass;
   if (auth) body.VPN_SECOND_AUTH = auth;
-  if (Object.keys(body).length === 0) { toast('Nothing to save', false); btn.disabled = false; return; }
+  if (Object.keys(body).length === 0) { btn.disabled = false; return; }
   try {
     const r = await fetch(API + '/api/config', {
       method: 'PUT',
@@ -230,10 +246,25 @@ async function saveConfig() {
       body: JSON.stringify(body)
     });
     const d = await r.json();
-    if (d.success) { toast('Configuration saved', true); loadConfig(); }
-    else toast('Save failed: ' + (d.error || ''), false);
-  } catch(e) { toast('Failed: ' + e.message, false); }
+    if (d.success) loadConfig();
+  } catch(e) {}
   btn.disabled = false;
+}
+
+async function openLogModal() {
+  document.getElementById('log-modal').classList.add('show');
+  document.getElementById('log-content').textContent = 'Loading...';
+  try {
+    const r = await fetch(API + '/api/vpn/log');
+    const d = await r.json();
+    document.getElementById('log-content').textContent = d.log || '(empty)';
+  } catch(e) {
+    document.getElementById('log-content').textContent = 'Failed to load logs.';
+  }
+}
+
+function closeLogModal() {
+  document.getElementById('log-modal').classList.remove('show');
 }
 
 document.getElementById('cfg-host').addEventListener('input', validateForm);

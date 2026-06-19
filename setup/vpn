@@ -71,13 +71,26 @@ case "$1" in
             ' > /dev/null 2>&1 &
         fi
         
-        # 4. Stream and Decode Logs (Fixing the \xxxx Unicode/Octal escape issue)
-        echo "=== [LOGS] Streaming active login logs (Auto-detach in 10s) ==="
-        timeout 10 tail -f /var/log/vpn_cli.log | while read -r line; do
-            # If the line contains escapes, force echo to parse it or fallback to raw
-            echo -e "$line" 2>/dev/null || echo "$line"
+        # 4. 确定性状态机：阻塞式轮询内核 tun0 网卡状态
+        echo "[MONITOR] Waiting for VPN tunnel (tun0) to establish..."
+        MAX_WAIT=15
+        COUNTER=0
+        
+        while [ $COUNTER -lt $MAX_WAIT ]; do
+            if ip route | grep -q "tun0"; then
+                echo "[SUCCESS] VPN connection established successfully."
+                exit 0
+            fi
+            if ! pgrep -f "isecspdaemon" > /dev/null; then
+                echo "[CRITICAL] Core daemon terminated unexpectedly during handshake."
+                exit 1
+            fi
+            sleep 1
+            COUNTER=$((COUNTER + 1))
         done
-        echo "=== [LOGS] Stream ended. Check status via 'vpn status' ==="
+        
+        echo "[CRITICAL] Connection timed out after ${MAX_WAIT}s without detecting tun0 interface."
+        exit 1
         ;;
         
     off|logout|stop)

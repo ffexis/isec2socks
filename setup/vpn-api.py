@@ -3,7 +3,6 @@ import bottle
 import subprocess
 import os
 import json
-import threading
 
 app = bottle.Bottle()
 CONFIG_FILE = '/etc/vpn-conf.json'
@@ -35,7 +34,8 @@ def parse_vpn_status(output):
     for line in output.split('\n'):
         line = line.strip()
         if 'VPN Status:' in line:
-            status['vpn'] = line.split(':', 1)[1].strip()
+            raw = line.split(':', 1)[1].strip()
+            status['vpn'] = raw.capitalize() if raw else 'DOWN'
         elif 'GOST Proxy' in line:
             status['gost'] = 'RUNNING' if 'RUNNING' in line else 'DOWN'
         elif 'Route Guardian' in line:
@@ -60,13 +60,20 @@ def vpn_status():
         return status
     return {'connected': False, 'vpn': 'DOWN', 'gost': 'DOWN', 'raw': 'No output'}
 
+@app.route('/api/vpn/log')
+def vpn_log():
+    log_path = '/var/log/vpn_cli.log'
+    if os.path.exists(log_path):
+        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+            return {'log': f.read()}
+    return {'log': ''}
+
 @app.route('/api/vpn/on', method='POST')
 def vpn_on():
-    def do_connect():
-        run_vpn_cmd('on', timeout=60)
-    thread = threading.Thread(target=do_connect, daemon=True)
-    thread.start()
-    return {'success': True, 'message': 'VPN connection initiated'}
+    result = run_vpn_cmd('on', timeout=20)
+    if result['success']:
+        return {'success': True}
+    return {'success': False}
 
 @app.route('/api/vpn/off', method='POST')
 def vpn_off():
