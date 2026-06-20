@@ -42,55 +42,48 @@ if ! pgrep -f "isecspdaemon" > /dev/null; then
     sleep 1.5
 fi
 
+# Helper function: Launch GOST proxy
+launch_gost() {
+    if ! pgrep -f "gost -L" > /dev/null; then
+        echo "[COMPONENT] Launching GOST proxy on port 31080..."
+        nohup gost -L :31080 > /var/log/gost.log 2>&1 &
+    else
+        echo "[COMPONENT] GOST proxy already running."
+    fi
+}
+
+# Helper function: Launch Route Guardian
+launch_guardian() {
+    if ! pgrep -f "vpn-route-guardian" > /dev/null; then
+        echo "[COMPONENT] Launching local route guardian..."
+        nohup bash -c '
+            exec -a vpn-route-guardian bash -c "
+            while true; do
+                if ! ip route | grep -q \"192.168.31.0/24\"; then
+                    ip route add 192.168.31.0/24 via 172.19.0.1 dev eth0 2>/dev/null
+                fi
+                sleep 3
+            done
+            "
+        ' > /dev/null 2>&1 &
+    else
+        echo "[COMPONENT] Route guardian already running."
+    fi
+}
+
 case "$1" in
     on|login|start)
-        echo "[START] Launching network stack (Pipeline Injection Mode)..."
-        > /var/log/vpn_cli.log
+        echo "[START] Launching VPN connection via Python CLI..."
+        python3 /usr/local/bin/vpn-api.py connect
+        exit $?
+        ;;
         
-        # 1. Inject password & fixing the log encoding issue on the fly using python/printf
-        nohup sh -c "echo '$VPN_SECOND_AUTH' | $VPN_CMD -h '$VPN_HOST' -u '$VPN_USER' -p '$VPN_PASS'" > /var/log/vpn_cli.log 2>&1 &
-        
-        # 2. Launch gost proxy
-        if ! pgrep -f "gost -L" > /dev/null; then
-            echo "[COMPONENT] Launching GOST proxy on port 31080..."
-            nohup gost -L :31080 > /var/log/gost.log 2>&1 &
-        fi
-        
-        # 3. Launch route guardian
-        if ! pgrep -f "vpn-route-guardian" > /dev/null; then
-            echo "[COMPONENT] Launching local route guardian..."
-            nohup bash -c '
-                exec -a vpn-route-guardian bash -c "
-                while true; do
-                    if ! ip route | grep -q \"192.168.31.0/24\"; then
-                        ip route add 192.168.31.0/24 via 172.19.0.1 dev eth0 2>/dev/null
-                    fi
-                    sleep 3
-                done
-                "
-            ' > /dev/null 2>&1 &
-        fi
-        
-        # 4. 确定性状态机：阻塞式轮询内核 tun0 网卡状态
-        echo "[MONITOR] Waiting for VPN tunnel (tun0) to establish..."
-        MAX_WAIT=15
-        COUNTER=0
-        
-        while [ $COUNTER -lt $MAX_WAIT ]; do
-            if ip route | grep -q "tun0"; then
-                echo "[SUCCESS] VPN connection established successfully."
-                exit 0
-            fi
-            if ! pgrep -f "isecspdaemon" > /dev/null; then
-                echo "[CRITICAL] Core daemon terminated unexpectedly during handshake."
-                exit 1
-            fi
-            sleep 1
-            COUNTER=$((COUNTER + 1))
-        done
-        
-        echo "[CRITICAL] Connection timed out after ${MAX_WAIT}s without detecting tun0 interface."
-        exit 1
+    on-services)
+        # Only start GOST and Route Guardian (called by Python after VPN connected)
+        echo "[SERVICES] Starting auxiliary services..."
+        launch_gost
+        launch_guardian
+        echo "[SERVICES] All auxiliary services started."
         ;;
         
     off|logout|stop)
@@ -137,9 +130,9 @@ case "$1" in
         
     *)
         echo "Invalid usage!"
-        echo "  vpn on       - Connect VPN + proxy + route guardian"
-        echo "  vpn off      - Disconnect and clean up"
-        echo "  vpn status   - View connection and routing status"
+        echo "  vpn on           - Connect VPN (interactive)"
+        echo "  vpn off          - Disconnect and clean up"
+        echo "  vpn status       - View connection and routing status"
         echo "  vpn api start|stop - Manage API server"
         ;;
 esac

@@ -7,26 +7,51 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
-  .container { max-width: 600px; margin: 0 auto; padding: 24px 16px; }
-  h1 { font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #f8fafc; }
-  h1 span { color: #38bdf8; }
+  
+  .container { display: flex; min-height: 100vh; }
+  
+  /* Left Panel - Log Viewer */
+  .log-panel { flex: 1; display: flex; flex-direction: column; border-right: 1px solid #334155; background: #0a0f1a; }
+  .log-header { padding: 16px 20px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+  .log-title { font-size: 14px; font-weight: 600; color: #94a3b8; }
+  .log-status { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .status-dot.connected { background: #4ade80; }
+  .status-dot.connecting { background: #fbbf24; animation: pulse 1s infinite; }
+  .status-dot.disconnected { background: #64748b; }
+  .status-dot.failed { background: #f87171; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .log-content { flex: 1; overflow-y: auto; padding: 16px 20px; font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+  .log-line { color: #94a3b8; }
+  .log-line.error { color: #f87171; }
+  .log-line.success { color: #4ade80; }
+  .log-line.info { color: #38bdf8; }
+  
+  /* Right Panel - Control */
+  .control-panel { width: 400px; display: flex; flex-direction: column; padding: 24px; overflow-y: auto; }
+  .control-header { margin-bottom: 24px; }
+  .control-header h1 { font-size: 20px; font-weight: 600; color: #f8fafc; }
+  .control-header h1 span { color: #38bdf8; }
+  
   .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #334155; }
   .card-title { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; margin-bottom: 16px; }
+  
   .status-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
   .status-item { text-align: center; }
   .status-label { font-size: 12px; color: #64748b; margin-bottom: 4px; }
   .status-value { font-size: 14px; font-weight: 600; }
   .status-on { color: #4ade80; }
   .status-off { color: #f87171; }
-  .btn-group { display: flex; gap: 12px; margin-top: 16px; }
-  .btn { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .btn-on { background: #16a34a; color: white; }
-  .btn-on:hover:not(:disabled) { background: #15803d; }
-  .btn-off { background: #dc2626; color: white; }
-  .btn-off:hover:not(:disabled) { background: #b91c1c; }
-  .btn-refresh { background: #334155; color: #e2e8f0; }
-  .btn-refresh:hover:not(:disabled) { background: #475569; }
+  
+  .btn-main { width: 100%; padding: 14px; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-top: 16px; }
+  .btn-main:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-connect { background: #16a34a; color: white; }
+  .btn-connect:hover:not(:disabled) { background: #15803d; }
+  .btn-disconnect { background: #dc2626; color: white; }
+  .btn-disconnect:hover:not(:disabled) { background: #b91c1c; }
+  .btn-cancel { background: #64748b; color: white; }
+  .btn-cancel:hover:not(:disabled) { background: #475569; }
+  
   .form-group { margin-bottom: 14px; }
   .form-group:last-child { margin-bottom: 0; }
   .form-label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; }
@@ -41,97 +66,371 @@
   .btn-save { width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 16px; transition: background 0.2s; }
   .btn-save:hover:not(:disabled) { background: #1d4ed8; }
   .btn-save:disabled { opacity: 0.4; cursor: not-allowed; }
-  .footer { text-align: center; font-size: 12px; color: #475569; margin-top: 24px; }
+  
+  .footer { text-align: center; font-size: 12px; color: #475569; margin-top: auto; padding-top: 24px; }
+  
+  /* Modal */
   .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 200; justify-content: center; align-items: center; }
   .modal-overlay.show { display: flex; }
-  .modal { background: #1e293b; border-radius: 12px; width: 90%; max-width: 700px; max-height: 80vh; display: flex; flex-direction: column; border: 1px solid #334155; }
-  .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #334155; font-weight: 600; }
+  .modal { background: #1e293b; border-radius: 12px; width: 90%; max-width: 400px; border: 1px solid #334155; }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #334155; }
+  .modal-header span { font-weight: 600; font-size: 16px; }
   .modal-close { background: none; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; }
   .modal-close:hover { color: #e2e8f0; }
-  .modal-body { padding: 16px 20px; overflow-y: auto; margin: 0; font-size: 13px; color: #94a3b8; white-space: pre-wrap; word-break: break-all; }
+  .modal-body { padding: 20px; }
+  .modal-prompt { font-size: 14px; color: #e2e8f0; margin-bottom: 16px; padding: 12px; background: #0f172a; border-radius: 8px; font-family: 'Monaco', 'Menlo', monospace; }
+  .modal-input { width: 100%; padding: 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 14px; outline: none; margin-bottom: 16px; }
+  .modal-input:focus { border-color: #38bdf8; }
+  .modal-buttons { display: flex; gap: 12px; }
+  .modal-btn { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .modal-btn-submit { background: #2563eb; color: white; }
+  .modal-btn-submit:hover { background: #1d4ed8; }
+  .modal-btn-cancel { background: #334155; color: #e2e8f0; }
+  .modal-btn-cancel:hover { background: #475569; }
+  
+  /* Responsive */
+  @media (max-width: 768px) {
+    .container { flex-direction: column; }
+    .log-panel { border-right: none; border-bottom: 1px solid #334155; height: 50vh; }
+    .control-panel { width: 100%; }
+  }
 </style>
 </head>
 <body>
 <div class="container">
-  <h1><span>isec2socks</span> VPN Manager</h1>
-
-  <div class="card">
-    <div class="card-title">Connection Status</div>
-    <div class="status-grid">
-      <div class="status-item">
-        <div class="status-label">VPN</div>
-        <div class="status-value" id="s-vpn">--</div>
-      </div>
-      <div class="status-item">
-        <div class="status-label">GOST Proxy</div>
-        <div class="status-value" id="s-gost">--</div>
-      </div>
-      <div class="status-item">
-        <div class="status-label">Route Guardian</div>
-        <div class="status-value" id="s-guardian">--</div>
+  <!-- Left Panel - Log Viewer -->
+  <div class="log-panel">
+    <div class="log-header">
+      <div class="log-title">VPN Client Output</div>
+      <div class="log-status">
+        <div class="status-dot disconnected" id="status-dot"></div>
+        <span id="status-text">Disconnected</span>
       </div>
     </div>
-    <div class="btn-group">
-      <button class="btn btn-on" id="btn-on" onclick="vpnOn()">Connect</button>
-      <button class="btn btn-off" id="btn-off" onclick="vpnOff()">Disconnect</button>
-      <button class="btn btn-refresh" onclick="refreshStatus()">Refresh</button>
-      <button class="btn btn-refresh" id="btn-logs" onclick="openLogModal()">Logs</button>
-    </div>
+    <div class="log-content" id="log-content">Waiting for connection...</div>
   </div>
-
-  <div class="card">
-    <div class="card-title">VPN Configuration</div>
-    <div class="form-group">
-      <label class="form-label">VPN Server</label>
-      <div class="form-row">
-        <input class="form-input host" id="cfg-host" placeholder="arrayvpn.pku.edu.cn">
-        <input class="form-input port" id="cfg-port" placeholder="443" maxlength="5">
+  
+  <!-- Right Panel - Control -->
+  <div class="control-panel">
+    <div class="control-header">
+      <h1><span>isec2socks</span> VPN Manager</h1>
+    </div>
+    
+    <div class="card">
+      <div class="card-title">Connection Status</div>
+      <div class="status-grid">
+        <div class="status-item">
+          <div class="status-label">VPN</div>
+          <div class="status-value" id="s-vpn">--</div>
+        </div>
+        <div class="status-item">
+          <div class="status-label">GOST Proxy</div>
+          <div class="status-value" id="s-gost">--</div>
+        </div>
+        <div class="status-item">
+          <div class="status-label">Route Guardian</div>
+          <div class="status-value" id="s-guardian">--</div>
+        </div>
       </div>
-      <div class="form-hint" id="hint-host"></div>
+      <button class="btn-main btn-connect" id="btn-main" onclick="toggleConnection()">Connect</button>
     </div>
-    <div class="form-group">
-      <label class="form-label">Username</label>
-      <input class="form-input" id="cfg-user" placeholder="Student ID">
+    
+    <div class="card">
+      <div class="card-title">VPN Configuration</div>
+      <div class="form-group">
+        <label class="form-label">VPN Server</label>
+        <div class="form-row">
+          <input class="form-input host" id="cfg-host" placeholder="arrayvpn.pku.edu.cn">
+          <input class="form-input port" id="cfg-port" placeholder="443" maxlength="5">
+        </div>
+        <div class="form-hint" id="hint-host"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input class="form-input" id="cfg-user" placeholder="Student ID">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" id="cfg-pass" type="password" placeholder="Password">
+      </div>
+      <button class="btn-save" id="btn-save" onclick="saveConfig()">Save Configuration</button>
     </div>
-    <div class="form-group">
-      <label class="form-label">Password</label>
-      <input class="form-input" id="cfg-pass" type="password" placeholder="Password">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Second Factor</label>
-      <input class="form-input" id="cfg-auth" placeholder="As prompted by official client login">
-    </div>
-    <div class="form-hint" style="margin-top: -8px; margin-bottom: 8px;">Provide the value as required when logging in with the official client.</div>
-    <button class="btn-save" id="btn-save" onclick="saveConfig()">Save Configuration</button>
+    
+    <div class="footer">isec2socks v0.3.0</div>
   </div>
-
-  <div class="footer">isec2socks v0.2.0</div>
 </div>
 
-<div class="modal-overlay" id="log-modal" onclick="closeLogModal()">
-  <div class="modal" onclick="event.stopPropagation()">
+<!-- Input Modal for Second Factor -->
+<div class="modal-overlay" id="input-modal">
+  <div class="modal">
     <div class="modal-header">
-      <span>VPN Logs</span>
-      <button class="modal-close" onclick="closeLogModal()">&times;</button>
+      <span>Authentication Required</span>
+      <button class="modal-close" onclick="cancelInput()">&times;</button>
     </div>
-    <pre class="modal-body" id="log-content"></pre>
+    <div class="modal-body">
+      <div class="modal-prompt" id="modal-prompt">Please enter:</div>
+      <input class="modal-input" id="modal-input" type="text" placeholder="Enter value..." onkeypress="handleModalKeypress(event)">
+      <div class="modal-buttons">
+        <button class="modal-btn modal-btn-cancel" onclick="cancelInput()">Cancel</button>
+        <button class="modal-btn modal-btn-submit" onclick="submitInput()">Submit</button>
+      </div>
+    </div>
   </div>
 </div>
 
 <script>
 const API = '';
+let eventSource = null;
+let currentStatus = 'idle';
 
+// Status management
 function setStatus(id, text) {
   const el = document.getElementById(id);
   el.textContent = text;
   el.className = 'status-value ' + (text === 'RUNNING' || text === 'Connected' ? 'status-on' : 'status-off');
 }
 
-function updateButtons(isConnected) {
-  document.getElementById('btn-on').disabled = isConnected;
-  document.getElementById('btn-off').disabled = !isConnected;
+function updateMainButton(status) {
+  const btn = document.getElementById('btn-main');
+  btn.disabled = false;
+  
+  switch(status) {
+    case 'idle':
+    case 'failed':
+      btn.textContent = 'Connect';
+      btn.className = 'btn-main btn-connect';
+      break;
+    case 'connecting':
+    case 'waiting_input':
+      btn.textContent = 'Cancel';
+      btn.className = 'btn-main btn-cancel';
+      break;
+    case 'connected':
+      btn.textContent = 'Disconnect';
+      btn.className = 'btn-main btn-disconnect';
+      break;
+  }
 }
 
+function updateStatusDot(status) {
+  const dot = document.getElementById('status-dot');
+  const text = document.getElementById('status-text');
+  
+  dot.className = 'status-dot';
+  
+  switch(status) {
+    case 'connected':
+      dot.classList.add('connected');
+      text.textContent = 'Connected';
+      break;
+    case 'connecting':
+    case 'waiting_input':
+      dot.classList.add('connecting');
+      text.textContent = status === 'waiting_input' ? 'Waiting for input' : 'Connecting';
+      break;
+    case 'failed':
+      dot.classList.add('failed');
+      text.textContent = 'Failed';
+      break;
+    default:
+      dot.classList.add('disconnected');
+      text.textContent = 'Disconnected';
+  }
+}
+
+// Log management
+function appendLog(text) {
+  const logContent = document.getElementById('log-content');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.textContent = text;
+  logContent.appendChild(line);
+  logContent.scrollTop = logContent.scrollHeight;
+  
+  // Limit log lines
+  while (logContent.children.length > 500) {
+    logContent.removeChild(logContent.firstChild);
+  }
+}
+
+function clearLog() {
+  const logContent = document.getElementById('log-content');
+  logContent.innerHTML = '';
+}
+
+// SSE connection
+function startLogStream() {
+  if (eventSource) {
+    eventSource.close();
+  }
+  
+  clearLog();
+  appendLog('[INFO] Starting VPN connection...');
+  
+  eventSource = new EventSource(API + '/api/vpn/log/stream');
+  
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      
+      if (data.log) {
+        appendLog(data.log);
+      }
+      
+      if (data.status) {
+        currentStatus = data.status;
+        updateStatusDot(data.status);
+        updateMainButton(data.status);
+        
+        if (data.status === 'connected') {
+          appendLog('[INFO] VPN connected successfully.');
+          if (data.type === 'services_started') {
+            appendLog('[INFO] GOST and Route Guardian started.');
+          }
+          refreshStatus();
+        } else if (data.status === 'failed') {
+          appendLog('[ERROR] Connection failed.');
+          refreshStatus();
+        }
+      }
+      
+      if (data.prompt) {
+        showInputModal(data.prompt);
+      }
+    } catch(e) {
+      console.error('Failed to parse SSE data:', e);
+    }
+  };
+  
+  eventSource.onerror = () => {
+    eventSource.close();
+    eventSource = null;
+    refreshStatus();
+  };
+}
+
+function stopLogStream() {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+}
+
+// Connection control
+async function toggleConnection() {
+  if (currentStatus === 'connecting' || currentStatus === 'waiting_input') {
+    // Cancel connection
+    try {
+      await fetch(API + '/api/vpn/cancel', { method: 'POST' });
+      stopLogStream();
+      currentStatus = 'idle';
+      updateStatusDot('idle');
+      updateMainButton('idle');
+      appendLog('[INFO] Connection cancelled.');
+    } catch(e) {
+      console.error('Failed to cancel:', e);
+    }
+  } else if (currentStatus === 'connected') {
+    // Disconnect
+    try {
+      await fetch(API + '/api/vpn/off', { method: 'POST' });
+      stopLogStream();
+      currentStatus = 'idle';
+      updateStatusDot('idle');
+      updateMainButton('idle');
+      appendLog('[INFO] Disconnected.');
+      refreshStatus();
+    } catch(e) {
+      console.error('Failed to disconnect:', e);
+    }
+  } else {
+    // Connect
+    try {
+      const r = await fetch(API + '/api/vpn/connect', { method: 'POST' });
+      const d = await r.json();
+      if (d.status === 'connecting') {
+        startLogStream();
+      } else if (d.error) {
+        appendLog('[ERROR] ' + d.error);
+      }
+    } catch(e) {
+      appendLog('[ERROR] Failed to start connection: ' + e.message);
+    }
+  }
+}
+
+// Input modal
+function showInputModal(prompt) {
+  document.getElementById('modal-prompt').textContent = prompt;
+  document.getElementById('modal-input').value = '';
+  document.getElementById('input-modal').classList.add('show');
+  document.getElementById('modal-input').focus();
+}
+
+function hideInputModal() {
+  document.getElementById('input-modal').classList.remove('show');
+}
+
+async function submitInput() {
+  const value = document.getElementById('modal-input').value;
+  if (!value) return;
+  
+  hideInputModal();
+  appendLog('[INPUT] ' + value);
+  
+  try {
+    await fetch(API + '/api/vpn/input', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: value })
+    });
+  } catch(e) {
+    console.error('Failed to submit input:', e);
+  }
+}
+
+async function cancelInput() {
+  hideInputModal();
+  try {
+    await fetch(API + '/api/vpn/cancel', { method: 'POST' });
+    stopLogStream();
+    currentStatus = 'idle';
+    updateStatusDot('idle');
+    updateMainButton('idle');
+    appendLog('[INFO] Authentication cancelled.');
+  } catch(e) {
+    console.error('Failed to cancel:', e);
+  }
+}
+
+function handleModalKeypress(event) {
+  if (event.key === 'Enter') {
+    submitInput();
+  }
+}
+
+// Status refresh
+async function refreshStatus() {
+  try {
+    const r = await fetch(API + '/api/vpn/status');
+    const d = await r.json();
+    
+    const vpn = d.connected ? 'Connected' : 'Disconnected';
+    setStatus('s-vpn', vpn);
+    setStatus('s-gost', d.gost || 'DOWN');
+    setStatus('s-guardian', d.guardian || 'DOWN');
+    
+    currentStatus = d.status || 'idle';
+    updateStatusDot(currentStatus);
+    updateMainButton(currentStatus);
+  } catch(e) {
+    setStatus('s-vpn', 'ERROR');
+    setStatus('s-gost', 'ERROR');
+    setStatus('s-guardian', 'ERROR');
+  }
+}
+
+// Config management
 function validatePort(p) {
   if (p === '') return true;
   const n = parseInt(p, 10);
@@ -144,9 +443,9 @@ function validateForm() {
   const user = document.getElementById('cfg-user').value.trim();
   const hint = document.getElementById('hint-host');
   const saveBtn = document.getElementById('btn-save');
-
+  
   let valid = true;
-
+  
   if (port && !validatePort(port)) {
     hint.textContent = 'Port must be 1-65535';
     hint.className = 'form-hint err';
@@ -155,65 +454,9 @@ function validateForm() {
     hint.textContent = '';
     hint.className = 'form-hint';
   }
-
+  
   if (!host || !user) valid = false;
   saveBtn.disabled = !valid;
-}
-
-async function refreshStatus() {
-  try {
-    const r = await fetch(API + '/api/vpn/status');
-    const d = await r.json();
-    const vpn = d.vpn || 'DOWN';
-    const currentVpn = document.getElementById('s-vpn').textContent;
-    if (vpn.toLowerCase() === 'connected') {
-      setStatus('s-vpn', 'Connected');
-      updateButtons(true);
-    } else if (currentVpn !== 'Connecting' && currentVpn !== 'Failed') {
-      setStatus('s-vpn', 'Disconnected');
-      updateButtons(false);
-    }
-    setStatus('s-gost', d.gost || 'DOWN');
-    setStatus('s-guardian', d.guardian || 'DOWN');
-  } catch(e) {
-    const currentVpn = document.getElementById('s-vpn').textContent;
-    if (currentVpn !== 'Connecting' && currentVpn !== 'Failed') {
-      setStatus('s-vpn', 'ERROR');
-    }
-    setStatus('s-gost', 'ERROR');
-    setStatus('s-guardian', 'ERROR');
-    updateButtons(false);
-  }
-}
-
-async function vpnOn() {
-  const btnOn = document.getElementById('btn-on');
-  btnOn.disabled = true;
-  setStatus('s-vpn', 'Connecting');
-  try {
-    const r = await fetch(API + '/api/vpn/on', { method: 'POST' });
-    const d = await r.json();
-    if (d.success) {
-      await refreshStatus();
-    } else {
-      setStatus('s-vpn', 'Failed');
-      openLogModal();
-    }
-  } catch(e) {
-    setStatus('s-vpn', 'ERROR');
-  } finally {
-    btnOn.disabled = false;
-  }
-}
-
-async function vpnOff() {
-  const btnOff = document.getElementById('btn-off');
-  btnOff.disabled = true;
-  try {
-    await fetch(API + '/api/vpn/off', { method: 'POST' });
-  } catch(e) {}
-  refreshStatus();
-  btnOff.disabled = false;
 }
 
 async function loadConfig() {
@@ -226,9 +469,7 @@ async function loadConfig() {
     document.getElementById('cfg-port').value = parts[1] || '443';
     document.getElementById('cfg-user').value = d.VPN_USER || '';
     document.getElementById('cfg-pass').value = '';
-    document.getElementById('cfg-auth').value = '';
-    document.getElementById('cfg-pass').placeholder = d.VPN_PASS === '****' ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' : 'Password';
-    document.getElementById('cfg-auth').placeholder = d.VPN_SECOND_AUTH === '****' ? '\u2022\u2022\u2022\u2022' : 'As prompted by official client login';
+    document.getElementById('cfg-pass').placeholder = d.VPN_PASS === '****' ? '••••••••' : 'Password';
     validateForm();
   } catch(e) {}
 }
@@ -240,14 +481,16 @@ async function saveConfig() {
   const port = document.getElementById('cfg-port').value.trim() || '443';
   const user = document.getElementById('cfg-user').value.trim();
   const pass = document.getElementById('cfg-pass').value;
-  const auth = document.getElementById('cfg-auth').value.trim();
+  
   if (!host || !user) { btn.disabled = false; return; }
+  
   const body = {};
   if (host) body.VPN_HOST = host + ':' + port;
   if (user) body.VPN_USER = user;
   if (pass) body.VPN_PASS = pass;
-  if (auth) body.VPN_SECOND_AUTH = auth;
+  
   if (Object.keys(body).length === 0) { btn.disabled = false; return; }
+  
   try {
     const r = await fetch(API + '/api/config', {
       method: 'PUT',
@@ -260,27 +503,13 @@ async function saveConfig() {
   btn.disabled = false;
 }
 
-async function openLogModal() {
-  document.getElementById('log-modal').classList.add('show');
-  document.getElementById('log-content').textContent = 'Loading...';
-  try {
-    const r = await fetch(API + '/api/vpn/log');
-    const d = await r.json();
-    document.getElementById('log-content').textContent = d.log || '(empty)';
-  } catch(e) {
-    document.getElementById('log-content').textContent = 'Failed to load logs.';
-  }
-}
-
-function closeLogModal() {
-  document.getElementById('log-modal').classList.remove('show');
-}
-
+// Event listeners
 document.getElementById('cfg-host').addEventListener('input', validateForm);
 document.getElementById('cfg-port').addEventListener('input', validateForm);
 document.getElementById('cfg-user').addEventListener('input', validateForm);
 document.getElementById('cfg-pass').addEventListener('input', validateForm);
 
+// Initialize
 refreshStatus();
 loadConfig();
 setInterval(refreshStatus, 10000);

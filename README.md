@@ -67,9 +67,12 @@ Network access control should be fully managed and isolated by the user's infras
 | `/` | GET | Web UI dashboard |
 | `/api/health` | GET | Health check |
 | `/api/vpn/status` | GET | VPN connection status |
-| `/api/vpn/log` | GET | VPN client logs |
-| `/api/vpn/on` | POST | Connect VPN |
+| `/api/vpn/connect` | POST | Start VPN connection (non-blocking) |
+| `/api/vpn/input` | POST | Submit user input for authentication |
+| `/api/vpn/cancel` | POST | Cancel current connection |
 | `/api/vpn/off` | POST | Disconnect VPN |
+| `/api/vpn/log` | GET | Get VPN client logs |
+| `/api/vpn/log/stream` | GET | SSE stream for real-time logs and status |
 | `/api/config` | GET | Read config (passwords masked) |
 | `/api/config` | PUT | Update config |
 
@@ -80,7 +83,15 @@ Example:
 curl http://localhost:31081/api/vpn/status
 
 # Connect VPN
-curl -X POST http://localhost:31081/api/vpn/on
+curl -X POST http://localhost:31081/api/vpn/connect
+
+# Submit authentication input
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"value":"123456"}' \
+  http://localhost:31081/api/vpn/input
+
+# Disconnect VPN
+curl -X POST http://localhost:31081/api/vpn/off
 
 # Update config
 curl -X PUT -H "Content-Type: application/json" \
@@ -186,9 +197,12 @@ environment:
 | `/` | GET | Web UI 控制面板 |
 | `/api/health` | GET | 健康检查 |
 | `/api/vpn/status` | GET | VPN 连接状态 |
-| `/api/vpn/log` | GET | VPN 客户端日志 |
-| `/api/vpn/on` | POST | 连接 VPN |
+| `/api/vpn/connect` | POST | 启动 VPN 连接（非阻塞） |
+| `/api/vpn/input` | POST | 提交用户输入用于认证 |
+| `/api/vpn/cancel` | POST | 取消当前连接 |
 | `/api/vpn/off` | POST | 断开 VPN |
+| `/api/vpn/log` | GET | 获取 VPN 客户端日志 |
+| `/api/vpn/log/stream` | GET | SSE 流式实时日志和状态 |
 | `/api/config` | GET | 读取配置（密码脱敏） |
 | `/api/config` | PUT | 更新配置 |
 
@@ -199,7 +213,15 @@ environment:
 curl http://localhost:31081/api/vpn/status
 
 # 连接 VPN
-curl -X POST http://localhost:31081/api/vpn/on
+curl -X POST http://localhost:31081/api/vpn/connect
+
+# 提交认证输入
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"value":"123456"}' \
+  http://localhost:31081/api/vpn/input
+
+# 断开 VPN
+curl -X POST http://localhost:31081/api/vpn/off
 
 # 更新配置
 curl -X PUT -H "Content-Type: application/json" \
