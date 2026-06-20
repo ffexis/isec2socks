@@ -134,6 +134,17 @@ MIT
 
 ---
 
+## Acknowledgments
+
+This project uses the following open source components:
+
+- [GOST](https://github.com/ginuerzh/gost) - GO Simple Tunnel (MIT License)
+- [Bottle](https://bottlepy.org/) - Fast and simple WSGI micro web-framework for Python (MIT License)
+- [Cheroot](https://github.com/cherrypy/cheroot) - High-performance, pure-Python HTTP server (BSD-3-Clause License)
+- [jq](https://github.com/stedolan/jq) - Command-line JSON processor (MIT License)
+
+---
+
 ## 中文
 
 ### 什么是 isec2socks？
@@ -261,3 +272,14 @@ curl -X PUT -H "Content-Type: application/json" \
 ### 许可证
 
 MIT
+
+---
+
+## 致谢
+
+本项目使用了以下开源组件：
+
+- [GOST](https://github.com/ginuerzh/gost) - GO Simple Tunnel (MIT License)
+- [Bottle](https://bottlepy.org/) - Fast and simple WSGI micro web-framework for Python (MIT License)
+- [Cheroot](https://github.com/cherrypy/cheroot) - High-performance, pure-Python HTTP server (BSD-3-Clause License)
+- [jq](https://github.com/stedolan/jq) - Command-line JSON processor (MIT License)
