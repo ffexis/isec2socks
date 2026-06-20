@@ -66,6 +66,7 @@ class VPNSessionManager:
         fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
         
         buffer = ''
+        tun0_check_counter = 0
         
         while not self._stop_event.is_set() and self.process.poll() is None:
             try:
@@ -92,6 +93,15 @@ class VPNSessionManager:
                             return  # Pause reading, wait for input
                 except (BlockingIOError, OSError):
                     pass
+            
+            # Check for tun0 interface every 5 iterations (~0.5s)
+            tun0_check_counter += 1
+            if tun0_check_counter >= 5:
+                tun0_check_counter = 0
+                if self._check_tun0():
+                    with self._lock:
+                        self.status = 'connected'
+                    return
         
         # Process ended
         with self._lock:
@@ -100,6 +110,19 @@ class VPNSessionManager:
                     self.status = 'connected'
                 else:
                     self.status = 'failed'
+    
+    def _check_tun0(self):
+        """Check if tun0 interface exists."""
+        try:
+            result = subprocess.run(
+                ['ip', 'route'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            return 'tun0' in result.stdout
+        except:
+            return False
     
     def start(self, host, user, password):
         """Start VPN process, non-blocking, returns immediately."""
@@ -113,6 +136,20 @@ class VPNSessionManager:
             self._stop_event.clear()
             
             try:
+                # Ensure VPN daemon is running
+                daemon_check = subprocess.run(
+                    ['pgrep', '-f', 'isecspdaemon'],
+                    capture_output=True
+                )
+                if daemon_check.returncode != 0:
+                    self.log_buffer.append('[INFO] Starting VPN daemon...\n')
+                    subprocess.Popen(
+                        ['/usr/bin/isecspdaemon'],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                    time.sleep(1.5)
+                
                 self.process = subprocess.Popen(
                     [VPN_CMD, '-h', host, '-u', user, '-p', password],
                     stdin=subprocess.PIPE,
@@ -122,6 +159,7 @@ class VPNSessionManager:
                     bufsize=0
                 )
                 self.status = 'connecting'
+                self.log_buffer.append('[INFO] VPN client process started.\n')
                 
                 # Start background thread to read output
                 self._read_thread = threading.Thread(target=self._read_output_loop, daemon=True)
@@ -130,6 +168,7 @@ class VPNSessionManager:
                 return {'status': 'connecting'}
             except Exception as e:
                 self.status = 'failed'
+                self.log_buffer.append(f'[ERROR] Failed to start VPN: {str(e)}\n')
                 return {'error': str(e), 'status': 'failed'}
     
     def send_input(self, value):
@@ -356,6 +395,16 @@ def vpn_log_stream():
     def generate():
         last_len = 0
         last_status = None
+        last_prompt = None
+        
+        # Send initial status immediately
+        with session._lock:
+            initial_status = session.status
+            initial_log_count = len(session.log_buffer)
+            last_len = initial_log_count
+            last_status = initial_status
+        
+        yield f'data: {json.dumps({"type": "status", "status": initial_status}, ensure_ascii=False)}\n\n'
         
         while True:
             with session._lock:
@@ -399,6 +448,11 @@ def vpn_log_stream():
                     # If failed, end stream
                     if current_status == 'failed':
                         break
+                
+                # Send prompt if changed
+                if current_prompt and current_prompt != last_prompt:
+                    last_prompt = current_prompt
+                    yield f'data: {json.dumps({"type": "prompt", "prompt": current_prompt, "status": current_status}, ensure_ascii=False)}\n\n'
             
             time.sleep(0.1)
     
