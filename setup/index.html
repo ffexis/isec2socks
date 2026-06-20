@@ -287,9 +287,13 @@ function startLogStream() {
           if (data.type === 'services_started') {
             appendLog('[INFO] GOST and Route Guardian started.');
           }
+          // Close SSE connection after connected
+          stopLogStream();
           refreshStatus();
         } else if (data.status === 'failed') {
           appendLog('[ERROR] Connection failed.');
+          // Close SSE connection after failed
+          stopLogStream();
           refreshStatus();
         }
       }
@@ -303,8 +307,7 @@ function startLogStream() {
   };
   
   eventSource.onerror = () => {
-    eventSource.close();
-    eventSource = null;
+    stopLogStream();
     refreshStatus();
   };
 }

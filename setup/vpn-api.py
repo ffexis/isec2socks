@@ -76,11 +76,15 @@ class VPNSessionManager:
             
             if ready:
                 try:
-                    chunk = os.read(fd, 1024).decode('utf-8', errors='ignore')
-                    if chunk:
-                        buffer += chunk
+                    chunk = os.read(fd, 1024)
+                    if not chunk:
+                        # EOF reached, process ended
+                        break
+                    chunk_str = chunk.decode('utf-8', errors='ignore')
+                    if chunk_str:
+                        buffer += chunk_str
                         with self._lock:
-                            self.log_buffer.append(chunk)
+                            self.log_buffer.append(chunk_str)
                             # Keep only last 1000 chunks to prevent memory overflow
                             if len(self.log_buffer) > 1000:
                                 self.log_buffer = self.log_buffer[-500:]
@@ -387,24 +391,30 @@ def vpn_log():
 @app.route('/api/vpn/log/stream')
 def vpn_log_stream():
     """SSE stream for real-time logs and status."""
-    response = bottle.Response()
-    response.content_type = 'text/event-stream'
-    response.cache_control = 'no-cache'
-    response.connection = 'keep-alive'
+    bottle.response.content_type = 'text/event-stream'
+    bottle.response.cache_control = 'no-cache'
+    bottle.response.connection = 'keep-alive'
     
     def generate():
         last_len = 0
         last_status = None
         last_prompt = None
         
-        # Send initial status immediately
+        # Send all existing logs first (don't skip startup logs)
         with session._lock:
             initial_status = session.status
-            initial_log_count = len(session.log_buffer)
-            last_len = initial_log_count
+            initial_logs = ''.join(session.log_buffer)
+            last_len = len(session.log_buffer)
             last_status = initial_status
         
-        yield f'data: {json.dumps({"type": "status", "status": initial_status}, ensure_ascii=False)}\n\n'
+        # Send initial status
+        data = {'type': 'status', 'status': initial_status}
+        yield ('data: ' + json.dumps(data, ensure_ascii=False) + '\n\n').encode('utf-8')
+        
+        # Send existing logs
+        if initial_logs:
+            data = {'type': 'log', 'log': initial_logs, 'status': initial_status}
+            yield ('data: ' + json.dumps(data, ensure_ascii=False) + '\n\n').encode('utf-8')
         
         while True:
             with session._lock:
@@ -425,7 +435,7 @@ def vpn_log_stream():
                     if current_prompt:
                         data['prompt'] = current_prompt
                     
-                    yield f'data: {json.dumps(data, ensure_ascii=False)}\n\n'
+                    yield ('data: ' + json.dumps(data, ensure_ascii=False) + '\n\n').encode('utf-8')
                 
                 # Send status change
                 if current_status != last_status:
@@ -437,27 +447,28 @@ def vpn_log_stream():
                     if current_prompt:
                         data['prompt'] = current_prompt
                     
-                    yield f'data: {json.dumps(data, ensure_ascii=False)}\n\n'
+                    yield ('data: ' + json.dumps(data, ensure_ascii=False) + '\n\n').encode('utf-8')
                     
                     # If connected, start services and end stream
                     if current_status == 'connected':
                         session.start_services()
-                        yield f'data: {json.dumps({"type": "services_started"}, ensure_ascii=False)}\n\n'
-                        break
+                        data = {'type': 'services_started'}
+                        yield ('data: ' + json.dumps(data, ensure_ascii=False) + '\n\n').encode('utf-8')
+                        return  # End the generator
                     
                     # If failed, end stream
                     if current_status == 'failed':
-                        break
+                        return
                 
                 # Send prompt if changed
                 if current_prompt and current_prompt != last_prompt:
                     last_prompt = current_prompt
-                    yield f'data: {json.dumps({"type": "prompt", "prompt": current_prompt, "status": current_status}, ensure_ascii=False)}\n\n'
+                    data = {'type': 'prompt', 'prompt': current_prompt, 'status': current_status}
+                    yield ('data: ' + json.dumps(data, ensure_ascii=False) + '\n\n').encode('utf-8')
             
             time.sleep(0.1)
     
-    response.body = generate()
-    return response
+    return generate()
 
 
 @app.route('/api/config')
