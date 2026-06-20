@@ -14,6 +14,10 @@ import threading
 import time
 import select
 import fcntl
+import pty
+import struct
+import termios
+import errno
 
 app = bottle.Bottle()
 CONFIG_FILE = '/etc/vpn-conf.json'
@@ -38,6 +42,7 @@ class VPNSessionManager:
     
     def __init__(self):
         self.process = None
+        self.master_fd = None  # PTY master file descriptor
         self.status = 'idle'  # idle | connecting | waiting_input | connected | failed
         self.log_buffer = []
         self.pending_prompt = None
@@ -60,23 +65,23 @@ class VPNSessionManager:
         return lines[-1].strip() if lines else ''
     
     def _read_output_loop(self):
-        """Background thread: continuously read output and detect prompts."""
-        fd = self.process.stdout.fileno()
-        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
-        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+        """Background thread: continuously read output from PTY and detect prompts."""
+        # Set non-blocking on master fd
+        flags = fcntl.fcntl(self.master_fd, fcntl.F_GETFL)
+        fcntl.fcntl(self.master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
         
         buffer = ''
         tun0_check_counter = 0
         
         while not self._stop_event.is_set() and self.process.poll() is None:
             try:
-                ready, _, _ = select.select([fd], [], [], 0.1)
+                ready, _, _ = select.select([self.master_fd], [], [], 0.1)
             except (ValueError, OSError):
                 break
             
             if ready:
                 try:
-                    chunk = os.read(fd, 1024)
+                    chunk = os.read(self.master_fd, 4096)
                     if not chunk:
                         # EOF reached, process ended
                         break
@@ -85,17 +90,18 @@ class VPNSessionManager:
                         buffer += chunk_str
                         with self._lock:
                             self.log_buffer.append(chunk_str)
-                            # Keep only last 1000 chunks to prevent memory overflow
-                            if len(self.log_buffer) > 1000:
-                                self.log_buffer = self.log_buffer[-500:]
-                        
-                        # Detect prompt
-                        if self._detect_prompt(buffer):
-                            with self._lock:
-                                self.status = 'waiting_input'
-                                self.pending_prompt = self._extract_prompt(buffer)
-                            return  # Pause reading, wait for input
-                except (BlockingIOError, OSError):
+                    
+                    # Detect prompt
+                    if self._detect_prompt(buffer):
+                        with self._lock:
+                            self.status = 'waiting_input'
+                            self.pending_prompt = self._extract_prompt(buffer)
+                        return  # Pause reading, wait for input
+                except OSError as e:
+                    # PTY slave closed - this is expected when process exits
+                    if hasattr(e, 'errno') and e.errno == errno.EIO:
+                        break
+                    # Other errors: continue trying
                     pass
             
             # Check for tun0 interface every 5 iterations (~0.5s)
@@ -129,7 +135,7 @@ class VPNSessionManager:
             return False
     
     def start(self, host, user, password):
-        """Start VPN process, non-blocking, returns immediately."""
+        """Start VPN process with PTY, non-blocking, returns immediately."""
         with self._lock:
             if self.process and self.process.poll() is None:
                 return {'error': 'Already running', 'status': self.status}
@@ -138,6 +144,14 @@ class VPNSessionManager:
             self.log_buffer = []
             self.pending_prompt = None
             self._stop_event.clear()
+            
+            # Close existing master_fd if any
+            if self.master_fd is not None:
+                try:
+                    os.close(self.master_fd)
+                except:
+                    pass
+                self.master_fd = None
             
             try:
                 # Ensure VPN daemon is running
@@ -154,16 +168,29 @@ class VPNSessionManager:
                     )
                     time.sleep(1.5)
                 
+                # Create PTY (pseudo-terminal)
+                master_fd, slave_fd = pty.openpty()
+                self.master_fd = master_fd
+                
+                # Set terminal size (optional, but helps some programs)
+                winsize = struct.pack('HHHH', 24, 80, 0, 0)
+                fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
+                
+                # Start process with PTY as stdin/stdout/stderr
                 self.process = subprocess.Popen(
                     [VPN_CMD, '-h', host, '-u', user, '-p', password],
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=False,
-                    bufsize=0
+                    stdin=slave_fd,
+                    stdout=slave_fd,
+                    stderr=slave_fd,
+                    close_fds=True,
+                    preexec_fn=os.setsid  # Create new session for proper PTY behavior
                 )
+                
+                # Close slave fd in parent process (child has its own copy)
+                os.close(slave_fd)
+                
                 self.status = 'connecting'
-                self.log_buffer.append('[INFO] VPN client process started.\n')
+                self.log_buffer.append('[INFO] VPN client process started with PTY.\n')
                 
                 # Start background thread to read output
                 self._read_thread = threading.Thread(target=self._read_output_loop, daemon=True)
@@ -176,7 +203,7 @@ class VPNSessionManager:
                 return {'error': str(e), 'status': 'failed'}
     
     def send_input(self, value):
-        """Send user input to VPN process and continue reading."""
+        """Send user input to VPN process via PTY and continue reading."""
         with self._lock:
             if self.status != 'waiting_input':
                 return {'error': 'Not waiting for input', 'status': self.status}
@@ -184,9 +211,11 @@ class VPNSessionManager:
             if not self.process or self.process.poll() is not None:
                 return {'error': 'Process not running', 'status': 'failed'}
             
+            if self.master_fd is None:
+                return {'error': 'PTY not available', 'status': 'failed'}
+            
             try:
-                self.process.stdin.write((value + '\n').encode('utf-8'))
-                self.process.stdin.flush()
+                os.write(self.master_fd, (value + '\n').encode('utf-8'))
                 self.status = 'connecting'
                 self.pending_prompt = None
                 
@@ -202,16 +231,26 @@ class VPNSessionManager:
     def cancel(self):
         """Cancel current connection."""
         with self._lock:
+            self._stop_event.set()
+            
             if self.process and self.process.poll() is None:
-                self._stop_event.set()
                 try:
-                    self.process.terminate()
+                    # Kill the process group (since we used setsid)
+                    os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
                     self.process.wait(timeout=3)
                 except:
                     try:
                         self.process.kill()
                     except:
                         pass
+            
+            # Close PTY master fd
+            if self.master_fd is not None:
+                try:
+                    os.close(self.master_fd)
+                except:
+                    pass
+                self.master_fd = None
             
             self.process = None
             self.status = 'idle'
@@ -236,13 +275,21 @@ class VPNSessionManager:
                 except:
                     if self.process.poll() is None:
                         try:
-                            self.process.terminate()
+                            os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
                             self.process.wait(timeout=3)
                         except:
                             try:
                                 self.process.kill()
                             except:
                                 pass
+            
+            # Close PTY master fd
+            if self.master_fd is not None:
+                try:
+                    os.close(self.master_fd)
+                except:
+                    pass
+                self.master_fd = None
             
             # Stop GOST and Route Guardian via bash script
             try:
@@ -393,7 +440,7 @@ def vpn_log_stream():
     """SSE stream for real-time logs and status."""
     bottle.response.content_type = 'text/event-stream'
     bottle.response.cache_control = 'no-cache'
-    bottle.response.connection = 'keep-alive'
+    bottle.response.headers['Connection'] = 'keep-alive'
     
     def generate():
         last_len = 0
@@ -523,7 +570,7 @@ def index():
 # ==================== CLI Mode ====================
 
 def cli_connect():
-    """CLI mode: synchronous blocking execution with terminal interaction."""
+    """CLI mode: synchronous blocking execution with terminal interaction using PTY."""
     print("[CLI] Starting VPN connection...")
     
     config = read_json_config()
@@ -541,50 +588,78 @@ def cli_connect():
         subprocess.Popen(['/usr/bin/isecspdaemon'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(1.5)
     
-    # Start VPN process
+    # Create PTY
+    try:
+        master_fd, slave_fd = pty.openpty()
+    except Exception as e:
+        print(f"[ERROR] Failed to create PTY: {e}")
+        return 1
+    
+    # Start VPN process with PTY
     try:
         process = subprocess.Popen(
             [VPN_CMD, '-h', host, '-u', user, '-p', password],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            close_fds=True,
+            preexec_fn=os.setsid
         )
+        os.close(slave_fd)
     except Exception as e:
         print(f"[ERROR] Failed to start VPN client: {e}")
+        os.close(master_fd)
         return 1
     
     buffer = ''
     
     try:
         while True:
-            char = process.stdout.read(1)
-            if not char:
+            try:
+                ready, _, _ = select.select([master_fd], [], [], 0.1)
+            except:
                 break
             
-            buffer += char
-            print(char, end='', flush=True)
-            
-            # Detect prompt
-            clean = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', buffer)
-            for pattern in PROMPT_PATTERNS:
-                if re.search(pattern, clean, re.IGNORECASE):
-                    try:
-                        value = input()
-                        process.stdin.write(value + '\n')
-                        process.stdin.flush()
-                        buffer = ''
+            if ready:
+                try:
+                    chunk = os.read(master_fd, 4096)
+                    if not chunk:
                         break
-                    except EOFError:
-                        process.terminate()
-                        return 1
+                    
+                    chunk_str = chunk.decode('utf-8', errors='ignore')
+                    buffer += chunk_str
+                    print(chunk_str, end='', flush=True)
+                    
+                    # Detect prompt
+                    clean = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', buffer)
+                    for pattern in PROMPT_PATTERNS:
+                        if re.search(pattern, clean, re.IGNORECASE):
+                            try:
+                                value = input()
+                                os.write(master_fd, (value + '\n').encode('utf-8'))
+                                buffer = ''
+                                break
+                            except EOFError:
+                                process.terminate()
+                                os.close(master_fd)
+                                return 1
+                except OSError as e:
+                    # PTY slave closed - this is expected when process exits
+                    if hasattr(e, 'errno') and e.errno == errno.EIO:
+                        break
+                    # Other errors: continue trying
+                    pass
+            
+            if process.poll() is not None:
+                break
     except KeyboardInterrupt:
         print("\n[CLI] Interrupted by user.")
         process.terminate()
+        os.close(master_fd)
         return 1
     
     process.wait()
+    os.close(master_fd)
     
     if process.returncode == 0:
         print("\n[CLI] VPN connected successfully.")
