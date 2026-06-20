@@ -49,6 +49,10 @@ class VPNSessionManager:
         self._lock = threading.Lock()
         self._read_thread = None
         self._stop_event = threading.Event()
+        self.second_auth = None  # Pre-configured second auth value
+        self.second_auth_used = False  # Track if auto-filled second auth was used
+        self.env_override = False  # Track if environment variables override config
+        self.user_provided_auth = None  # User-provided second auth value
     
     def _detect_prompt(self, text):
         """Detect if the text contains an input prompt."""
@@ -93,6 +97,15 @@ class VPNSessionManager:
                     
                     # Detect prompt
                     if self._detect_prompt(buffer):
+                        # Try auto-fill second auth if available and not used yet
+                        if self.second_auth and not self.second_auth_used:
+                            self.log_buffer.append('[INFO] Auto-filling second authentication...\n')
+                            self.second_auth_used = True
+                            os.write(self.master_fd, (self.second_auth + '\n').encode('utf-8'))
+                            buffer = ''
+                            # Continue reading without changing status
+                            continue
+                        
                         with self._lock:
                             self.status = 'waiting_input'
                             self.pending_prompt = self._extract_prompt(buffer)
@@ -109,6 +122,27 @@ class VPNSessionManager:
             if tun0_check_counter >= 5:
                 tun0_check_counter = 0
                 if self._check_tun0():
+                    # Wait 0.5s to collect remaining output
+                    time.sleep(0.5)
+                    # Drain any remaining output
+                    while True:
+                        try:
+                            ready, _, _ = select.select([self.master_fd], [], [], 0.1)
+                            if not ready:
+                                break
+                            chunk = os.read(self.master_fd, 4096)
+                            if not chunk:
+                                break
+                            chunk_str = chunk.decode('utf-8', errors='ignore')
+                            if chunk_str:
+                                with self._lock:
+                                    self.log_buffer.append(chunk_str)
+                        except OSError as e:
+                            if hasattr(e, 'errno') and e.errno == errno.EIO:
+                                break
+                            break
+                    # Update config with user-provided auth if applicable
+                    self._update_config_with_auth()
                     with self._lock:
                         self.status = 'connected'
                     return
@@ -134,7 +168,18 @@ class VPNSessionManager:
         except:
             return False
     
-    def start(self, host, user, password):
+    def _update_config_with_auth(self):
+        """Update config file with user-provided second auth if applicable."""
+        if self.user_provided_auth and not self.env_override:
+            try:
+                config = read_json_config()
+                config['VPN_SECOND_AUTH'] = self.user_provided_auth
+                write_json_config(config)
+                self.log_buffer.append('[INFO] Second authentication saved to config.\n')
+            except Exception as e:
+                self.log_buffer.append(f'[WARN] Failed to save second auth to config: {str(e)}\n')
+    
+    def start(self, host, user, password, second_auth=None, env_override=False):
         """Start VPN process with PTY, non-blocking, returns immediately."""
         with self._lock:
             if self.process and self.process.poll() is None:
@@ -144,6 +189,9 @@ class VPNSessionManager:
             self.log_buffer = []
             self.pending_prompt = None
             self._stop_event.clear()
+            self.second_auth = second_auth
+            self.second_auth_used = False
+            self.env_override = env_override
             
             # Close existing master_fd if any
             if self.master_fd is not None:
@@ -216,6 +264,8 @@ class VPNSessionManager:
             
             try:
                 os.write(self.master_fd, (value + '\n').encode('utf-8'))
+                # Store user-provided auth for potential config update
+                self.user_provided_auth = value
                 self.status = 'connecting'
                 self.pending_prompt = None
                 
@@ -373,11 +423,20 @@ def vpn_connect():
     host = data.get('host') or os.environ.get('VPN_HOST') or config.get('VPN_HOST')
     user = data.get('user') or os.environ.get('VPN_USER') or config.get('VPN_USER')
     password = data.get('password') or os.environ.get('VPN_PASS') or config.get('VPN_PASS')
+    second_auth = os.environ.get('VPN_SECOND_AUTH') or config.get('VPN_SECOND_AUTH')
+    
+    # Check if environment variables override config
+    env_override = bool(
+        os.environ.get('VPN_HOST') or 
+        os.environ.get('VPN_USER') or 
+        os.environ.get('VPN_PASS') or 
+        os.environ.get('VPN_SECOND_AUTH')
+    )
     
     if not all([host, user, password]):
         return {'error': 'Missing required credentials', 'status': 'failed'}
     
-    return session.start(host, user, password)
+    return session.start(host, user, password, second_auth=second_auth, env_override=env_override)
 
 
 @app.route('/api/vpn/input', method='POST')

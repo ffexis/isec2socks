@@ -6,14 +6,15 @@
 <title>isec2socks - VPN Manager</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
   
-  .container { display: flex; min-height: 100vh; }
+  .container { display: flex; width: 100%; max-width: 1000px; min-height: 600px; background: #1e293b; border-radius: 16px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
   
   /* Left Panel - Log Viewer */
   .log-panel { flex: 1; display: flex; flex-direction: column; border-right: 1px solid #334155; background: #0a0f1a; }
   .log-header { padding: 16px 20px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
-  .log-title { font-size: 14px; font-weight: 600; color: #94a3b8; }
+  .log-title { font-size: 16px; font-weight: 600; color: #f8fafc; }
+  .log-title span { color: #38bdf8; }
   .log-status { display: flex; align-items: center; gap: 8px; font-size: 12px; }
   .status-dot { width: 8px; height: 8px; border-radius: 50%; }
   .status-dot.connected { background: #4ade80; }
@@ -28,18 +29,15 @@
   .log-line.info { color: #38bdf8; }
   
   /* Right Panel - Control */
-  .control-panel { width: 400px; display: flex; flex-direction: column; padding: 24px; overflow-y: auto; }
-  .control-header { margin-bottom: 24px; }
-  .control-header h1 { font-size: 20px; font-weight: 600; color: #f8fafc; }
-  .control-header h1 span { color: #38bdf8; }
+  .control-panel { width: 350px; display: flex; flex-direction: column; padding: 24px; overflow-y: auto; }
   
-  .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #334155; }
-  .card-title { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; margin-bottom: 16px; }
+  .card { background: #0f172a; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #334155; }
+  .card-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; margin-bottom: 16px; }
   
   .status-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
   .status-item { text-align: center; }
-  .status-label { font-size: 12px; color: #64748b; margin-bottom: 4px; }
-  .status-value { font-size: 14px; font-weight: 600; }
+  .status-label { font-size: 11px; color: #64748b; margin-bottom: 4px; }
+  .status-value { font-size: 13px; font-weight: 600; }
   .status-on { color: #4ade80; }
   .status-off { color: #f87171; }
   
@@ -54,35 +52,35 @@
   
   .form-group { margin-bottom: 14px; }
   .form-group:last-child { margin-bottom: 0; }
-  .form-label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; }
+  .form-label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 6px; }
   .form-row { display: flex; gap: 8px; }
-  .form-input { width: 100%; padding: 10px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 14px; outline: none; transition: border-color 0.2s; }
+  .form-input { width: 100%; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 13px; outline: none; transition: border-color 0.2s; }
   .form-input:focus { border-color: #38bdf8; }
   .form-input::placeholder { color: #475569; }
   .form-input.host { flex: 1; }
-  .form-input.port { width: 80px; flex: none; text-align: center; }
+  .form-input.port { width: 70px; flex: none; text-align: center; }
   .form-hint { font-size: 11px; color: #64748b; margin-top: 4px; }
   .form-hint.err { color: #f87171; }
-  .btn-save { width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 16px; transition: background 0.2s; }
+  .btn-save { width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 16px; transition: background 0.2s; }
   .btn-save:hover:not(:disabled) { background: #1d4ed8; }
   .btn-save:disabled { opacity: 0.4; cursor: not-allowed; }
   
-  .footer { text-align: center; font-size: 12px; color: #475569; margin-top: auto; padding-top: 24px; }
+  .footer { text-align: center; font-size: 11px; color: #475569; margin-top: auto; padding-top: 16px; }
   
   /* Modal */
   .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 200; justify-content: center; align-items: center; }
   .modal-overlay.show { display: flex; }
   .modal { background: #1e293b; border-radius: 12px; width: 90%; max-width: 400px; border: 1px solid #334155; }
   .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #334155; }
-  .modal-header span { font-weight: 600; font-size: 16px; }
+  .modal-header span { font-weight: 600; font-size: 15px; }
   .modal-close { background: none; border: none; color: #94a3b8; font-size: 24px; cursor: pointer; }
   .modal-close:hover { color: #e2e8f0; }
   .modal-body { padding: 20px; }
-  .modal-prompt { font-size: 14px; color: #e2e8f0; margin-bottom: 16px; padding: 12px; background: #0f172a; border-radius: 8px; font-family: 'Monaco', 'Menlo', monospace; }
-  .modal-input { width: 100%; padding: 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 14px; outline: none; margin-bottom: 16px; }
+  .modal-prompt { font-size: 13px; color: #e2e8f0; margin-bottom: 16px; padding: 12px; background: #0f172a; border-radius: 8px; font-family: 'Monaco', 'Menlo', monospace; }
+  .modal-input { width: 100%; padding: 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 13px; outline: none; margin-bottom: 16px; }
   .modal-input:focus { border-color: #38bdf8; }
   .modal-buttons { display: flex; gap: 12px; }
-  .modal-btn { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .modal-btn { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
   .modal-btn-submit { background: #2563eb; color: white; }
   .modal-btn-submit:hover { background: #1d4ed8; }
   .modal-btn-cancel { background: #334155; color: #e2e8f0; }
@@ -90,8 +88,9 @@
   
   /* Responsive */
   @media (max-width: 768px) {
-    .container { flex-direction: column; }
-    .log-panel { border-right: none; border-bottom: 1px solid #334155; height: 50vh; }
+    body { padding: 10px; align-items: flex-start; }
+    .container { flex-direction: column; min-height: auto; }
+    .log-panel { border-right: none; border-bottom: 1px solid #334155; height: 300px; }
     .control-panel { width: 100%; }
   }
 </style>
@@ -101,7 +100,7 @@
   <!-- Left Panel - Log Viewer -->
   <div class="log-panel">
     <div class="log-header">
-      <div class="log-title">VPN Client Output</div>
+      <div class="log-title"><span>isec2socks</span> VPN Manager</div>
       <div class="log-status">
         <div class="status-dot disconnected" id="status-dot"></div>
         <span id="status-text">Disconnected</span>
@@ -112,10 +111,6 @@
   
   <!-- Right Panel - Control -->
   <div class="control-panel">
-    <div class="control-header">
-      <h1><span>isec2socks</span> VPN Manager</h1>
-    </div>
-    
     <div class="card">
       <div class="card-title">Connection Status</div>
       <div class="status-grid">
@@ -152,6 +147,11 @@
       <div class="form-group">
         <label class="form-label">Password</label>
         <input class="form-input" id="cfg-pass" type="password" placeholder="Password">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Second Authentication (Optional)</label>
+        <input class="form-input" id="cfg-second-auth" type="password" placeholder="Second factor code">
+        <div class="form-hint">Auto-filled if required during connection</div>
       </div>
       <button class="btn-save" id="btn-save" onclick="saveConfig()">Save Configuration</button>
     </div>
@@ -473,6 +473,8 @@ async function loadConfig() {
     document.getElementById('cfg-user').value = d.VPN_USER || '';
     document.getElementById('cfg-pass').value = '';
     document.getElementById('cfg-pass').placeholder = d.VPN_PASS === '****' ? '••••••••' : 'Password';
+    document.getElementById('cfg-second-auth').value = '';
+    document.getElementById('cfg-second-auth').placeholder = d.VPN_SECOND_AUTH === '****' ? '••••••••' : 'Second factor code';
     validateForm();
   } catch(e) {}
 }
@@ -484,6 +486,7 @@ async function saveConfig() {
   const port = document.getElementById('cfg-port').value.trim() || '443';
   const user = document.getElementById('cfg-user').value.trim();
   const pass = document.getElementById('cfg-pass').value;
+  const secondAuth = document.getElementById('cfg-second-auth').value;
   
   if (!host || !user) { btn.disabled = false; return; }
   
@@ -491,6 +494,7 @@ async function saveConfig() {
   if (host) body.VPN_HOST = host + ':' + port;
   if (user) body.VPN_USER = user;
   if (pass) body.VPN_PASS = pass;
+  if (secondAuth) body.VPN_SECOND_AUTH = secondAuth;
   
   if (Object.keys(body).length === 0) { btn.disabled = false; return; }
   
@@ -511,6 +515,7 @@ document.getElementById('cfg-host').addEventListener('input', validateForm);
 document.getElementById('cfg-port').addEventListener('input', validateForm);
 document.getElementById('cfg-user').addEventListener('input', validateForm);
 document.getElementById('cfg-pass').addEventListener('input', validateForm);
+document.getElementById('cfg-second-auth').addEventListener('input', validateForm);
 
 // Initialize
 refreshStatus();
