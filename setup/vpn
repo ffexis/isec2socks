@@ -56,12 +56,30 @@ launch_gost() {
 launch_guardian() {
     if ! pgrep -f "vpn-route-guardian" > /dev/null; then
         echo "[COMPONENT] Launching local route guardian..."
+        
+        # Auto-detect gateway and interface from default route
+        GATEWAY=$(ip route | grep default | awk '{print $3}' | head -1)
+        INTERFACE=$(ip route | grep default | awk '{print $5}' | head -1)
+        
+        if [ -z "$GATEWAY" ] || [ -z "$INTERFACE" ]; then
+            echo "[WARN] Cannot detect gateway/interface, skipping route guardian."
+            return
+        fi
+        
+        echo "[COMPONENT] Detected gateway: $GATEWAY, interface: $INTERFACE"
+        
         nohup bash -c '
             exec -a vpn-route-guardian bash -c "
+            GATEWAY=\"'"$GATEWAY"'\"
+            INTERFACE=\"'"$INTERFACE"'\"
+            
             while true; do
-                if ! ip route | grep -q \"192.168.31.0/24\"; then
-                    ip route add 192.168.31.0/24 via 172.19.0.1 dev eth0 2>/dev/null
-                fi
+                # Add routes for all private IP ranges
+                for cidr in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16; do
+                    if ! ip route | grep -q \"\$cidr\"; then
+                        ip route add \$cidr via \$GATEWAY dev \$INTERFACE 2>/dev/null
+                    fi
+                done
                 sleep 3
             done
             "
@@ -104,7 +122,7 @@ case "$1" in
         pgrep -f "vpn-route-guardian" > /dev/null && echo "  Route Guardian : RUNNING" || echo "  Route Guardian : DOWN"
         echo ""
         echo "=== [STATUS] Kernel Routing Table ==="
-        ip route | grep -E "tun0|192.168.31" --color=always
+        ip route | grep -E "tun0|10\.|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[0-1]\.|192\.168\." --color=always
         ;;
         
     api)
