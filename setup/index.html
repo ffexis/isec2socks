@@ -518,8 +518,22 @@ document.getElementById('cfg-pass').addEventListener('input', validateForm);
 document.getElementById('cfg-second-auth').addEventListener('input', validateForm);
 
 // Initialize
-refreshStatus();
-loadConfig();
+async function init() {
+  await refreshStatus();
+  loadConfig();
+  // Load existing logs if connected or connecting
+  if (currentStatus === 'connected' || currentStatus === 'connecting') {
+    try {
+      const r = await fetch(API + '/api/vpn/log');
+      const d = await r.json();
+      if (d.log) {
+        clearLog();
+        appendLog(d.log);
+      }
+    } catch(e) {}
+  }
+}
+init();
 setInterval(refreshStatus, 10000);
 </script>
 </body>

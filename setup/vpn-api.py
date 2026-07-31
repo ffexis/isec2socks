@@ -34,6 +34,9 @@ PROMPT_PATTERNS = [
     r'Password.*[:：]?\s*$',         # Password prompt
     r'Second factor.*[:：]?\s*$',    # Second factor prompt
     r'\[\d+\].*$',                   # Option list
+    r'身份证.*$',                    # ID card verification prompt
+    r'手机号.*$',                    # Phone number verification prompt
+    r'额外凭据.*$',                  # Additional credentials prompt
 ]
 
 
@@ -99,6 +102,8 @@ class VPNSessionManager:
                     if self._detect_prompt(buffer):
                         # Try auto-fill second auth if available and not used yet
                         if self.second_auth and not self.second_auth_used:
+                            if self.log_buffer and not self.log_buffer[-1].endswith('\n'):
+                                self.log_buffer.append('\n')
                             self.log_buffer.append('[INFO] Auto-filling second authentication...\n')
                             self.second_auth_used = True
                             os.write(self.master_fd, (self.second_auth + '\n').encode('utf-8'))
